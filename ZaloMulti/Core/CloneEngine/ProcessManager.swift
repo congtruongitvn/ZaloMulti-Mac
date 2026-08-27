@@ -59,7 +59,10 @@ final class ProcessManager: ObservableObject {
         process.executableURL = URL(fileURLWithPath: actualBinary)
         process.currentDirectoryURL = URL(fileURLWithPath: clone.dataPath)
         
-        // Session persistence configured
+        // Cấu hình môi trường cách ly cho từng clone (HOME trỏ về clone.dataPath)
+        var env = ProcessInfo.processInfo.environment
+        env["HOME"] = clone.dataPath
+        process.environment = env
         
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

@@ -10,6 +10,12 @@ struct AddCloneView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var store: CloneStore
     
+    private enum Field: Hashable {
+        case name
+        case phone
+    }
+    
+    @FocusState private var focusedField: Field?
     @State private var name = ""
     @State private var phoneNumber = ""
     @State private var isCreating = false
@@ -22,88 +28,124 @@ struct AddCloneView: View {
                 Text("Thêm tài khoản Clone")
                     .font(.headline)
                 Spacer()
-                Button("Huỷ") { dismiss() }
-                    .keyboardShortcut(.escape)
-                    .disabled(isCreating)
+                Button(action: closeForm) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(isCreating)
             }
             .padding()
             
             Divider()
             
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    GroupBox("Thông tin tài khoản") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            LabeledField("Tên hiển thị", text: $name,
-                                         placeholder: "VD: Business, Shop Online...")
-                            LabeledField("Số điện thoại", text: $phoneNumber,
-                                         placeholder: "0901234567")
-                            
-                            // Progress bar
-                            if isCreating {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack(spacing: 8) {
-                                        ProgressView()
-                                            .controlSize(.small)
-                                        Text(store.engine.progressMessage)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                    
-                                    ProgressView(value: progressValue)
-                                        .progressViewStyle(.linear)
-                                        .tint(.accentColor)
-                                    
-                                    Text(progressStep)
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .padding(.top, 4)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
-                            
-                            if createComplete {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                    Text("Tạo clone thành công!")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                        .fontWeight(.semibold)
-                                }
-                                .padding(.top, 4)
-                                .transition(.opacity)
-                            }
+            // Content Form (Không dùng ScrollView để tránh lỗi auto-scroll mất focus/viewport trên macOS)
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox("Thông tin tài khoản") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Tên hiển thị")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("VD: Business, Shop Online...", text: $name)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($focusedField, equals: .name)
+                                .id("add_clone_name_field")
+                                .onSubmit { focusedField = .phone }
                         }
-                        .padding(8)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Số điện thoại")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("0901234567", text: $phoneNumber)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($focusedField, equals: .phone)
+                                .id("add_clone_phone_field")
+                                .onSubmit {
+                                    if !name.isEmpty && !isCreating && store.canAddMore {
+                                        createClone()
+                                    }
+                                }
+                        }
+                        
+                        // Progress bar
+                        if isCreating {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text(store.engine.progressMessage)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                
+                                ProgressView(value: progressValue)
+                                    .progressViewStyle(.linear)
+                                    .tint(.accentColor)
+                                
+                                Text(progressStep)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.top, 4)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                        
+                        if createComplete {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Tạo clone thành công!")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                                    .fontWeight(.semibold)
+                            }
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                        }
                     }
+                    .padding(10)
                 }
-                .padding()
             }
+            .padding(16)
+            
+            Spacer()
             
             Divider()
             
             // Footer
             HStack {
                 Spacer()
-                Button("Huỷ") { dismiss() }
+                Button("Huỷ", action: closeForm)
                     .keyboardShortcut(.escape)
                     .disabled(isCreating)
                 Button(createComplete ? "Đóng" : "Tạo Clone") {
                     if createComplete {
-                        dismiss()
+                        closeForm()
                     } else {
                         createClone()
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(name.isEmpty || isCreating)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCreating || !store.canAddMore)
                 .keyboardShortcut(.return)
             }
             .padding()
         }
-        .frame(width: 460, height: 340)
+        .frame(width: 460, height: 350)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                focusedField = .name
+            }
+        }
+    }
+    
+    private func closeForm() {
+        store.showAddCloneSheet = false
+        dismiss()
     }
     
     private var progressStep: String {
@@ -135,6 +177,14 @@ struct AddCloneView: View {
     }
     
     private func createClone() {
+        guard store.canAddMore else {
+            store.errorMessage = "Đã đạt giới hạn tối đa \(CloneStore.maxClones) tài khoản."
+            store.showError = true
+            return
+        }
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else { return }
+        
         store.engine.progressMessage = "Đang chuẩn bị..."
         withAnimation { isCreating = true }
         
@@ -143,8 +193,8 @@ struct AddCloneView: View {
                 let nextIndex = (store.clones.map(\.cloneIndex).max() ?? 0) + 1
                 let clone = try await store.engine.createClone(
                     index: nextIndex,
-                    name: name,
-                    phone: phoneNumber
+                    name: cleanName,
+                    phone: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
                 store.clones.append(clone)
                 store.saveClones()
@@ -152,36 +202,13 @@ struct AddCloneView: View {
                     isCreating = false
                     createComplete = true
                 }
-                try? await Task.sleep(for: .seconds(1.5))
-                dismiss()
+                try? await Task.sleep(for: .seconds(1.2))
+                closeForm()
             } catch {
                 withAnimation { isCreating = false }
                 store.errorMessage = error.localizedDescription
                 store.showError = true
             }
-        }
-    }
-}
-
-// MARK: - Labeled Text Field
-struct LabeledField: View {
-    let label: String
-    @Binding var text: String
-    let placeholder: String
-    
-    init(_ label: String, text: Binding<String>, placeholder: String = "") {
-        self.label = label
-        self._text = text
-        self.placeholder = placeholder
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField(placeholder, text: $text)
-                .textFieldStyle(.roundedBorder)
         }
     }
 }

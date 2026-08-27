@@ -41,7 +41,10 @@ struct ContentView: View {
                 .help("Ẩn/Hiện thanh bên")
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .sheet(isPresented: $cloneStore.showAddCloneSheet) {
+            AddCloneView()
+                .environmentObject(cloneStore)
+        }
         .alert("Lỗi", isPresented: $cloneStore.showError) {
             Button("OK") { cloneStore.showError = false }
         } message: {

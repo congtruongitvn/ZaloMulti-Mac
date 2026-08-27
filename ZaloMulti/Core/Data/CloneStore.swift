@@ -12,11 +12,17 @@ import SwiftUI
 @MainActor
 final class CloneStore: ObservableObject {
     
+    // MARK: - Constants
+    static let maxClones = 4
+    
     // MARK: - Published Properties
     @Published var clones: [CloneAccount] = []
     @Published var showAddCloneSheet = false
     @Published var errorMessage: String?
     @Published var showError = false
+    
+    /// Kiểm tra còn slot trống không (tối đa 4 tài khoản)
+    var canAddMore: Bool { clones.count < Self.maxClones }
     
     // MARK: - Dependencies
     let engine = ZaloCloneEngine()
@@ -52,6 +58,12 @@ final class CloneStore: ObservableObject {
     
     /// Thêm clone mới
     func addClone(name: String, phone: String) {
+        guard canAddMore else {
+            errorMessage = "Đã đạt giới hạn tối đa \(Self.maxClones) tài khoản."
+            showError = true
+            DiagnosticLogger.warning("STORE", "addClone bị chặn: đã đạt giới hạn \(Self.maxClones) TK")
+            return
+        }
         let nextIndex = (clones.map(\.cloneIndex).max() ?? 0) + 1
         DiagnosticLogger.info("STORE", "addClone: name='\(name)', nextIndex=\(nextIndex)")
         

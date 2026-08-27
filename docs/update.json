@@ -1,10 +1,10 @@
 {
-    "version": "2.0.1",
-    "build": 4,
-    "release_date": "2026-05-27",
-    "release_notes": "Hotfix sửa lỗi bảo mật và tối ưu ứng dụng để mang đến trải nghiệm tốt nhất.",
-    "download_url": "https://truong.me/zalo-multi-mac/download/ZaloMulti-v2.0.1.zip",
-    "download_size": 655714,
+    "version": "2.1.1",
+    "build": 5,
+    "release_date": "2026-08-27",
+    "release_notes": "Sửa lỗi form tạo tài khoản clone (trường tên bị mất khi chuyển sang SĐT, nút Huỷ không bấm được), tối ưu hóa toàn diện cho chip Apple Silicon (M1/M2/M3/M4) và Intel.",
+    "download_url": "https://github.com/nct88/ZaloMulti-macOS/releases/download/v2.1.1/ZaloMulti-2.1.1-Universal.dmg",
+    "download_size": 1937174,
     "min_os_version": "14.0",
-    "mandatory": true
+    "mandatory": false
 }

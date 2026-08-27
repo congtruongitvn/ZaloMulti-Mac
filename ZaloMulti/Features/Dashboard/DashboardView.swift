@@ -25,12 +25,12 @@ struct DashboardView: View {
                 
                 Spacer()
                 
-                Text("\(store.totalCount) tài khoản")
+                Text("\(store.totalCount)/\(CloneStore.maxClones) tài khoản")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(store.canAddMore ? .accentColor : .orange)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.12))
+                    .background((store.canAddMore ? Color.accentColor : Color.orange).opacity(0.12))
                     .clipShape(Capsule())
             }
             .padding(.horizontal, 16)
@@ -41,18 +41,18 @@ struct DashboardView: View {
                     CloneCardView(clone: clone)
                 }
                 
-                // Nút thêm clone — Button rõ ràng, không dùng onTapGesture
-                AddCloneCardView {
-                    store.showAddCloneSheet = true
+                // Nút thêm clone — chỉ hiện khi chưa đạt giới hạn
+                if store.canAddMore {
+                    AddCloneCardView {
+                        store.showAddCloneSheet = true
+                    }
+                } else {
+                    MaxClonesReachedView()
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
             .animation(.spring(response: 0.3), value: store.clones.count)
-        }
-        .sheet(isPresented: $store.showAddCloneSheet) {
-            AddCloneView()
-                .environmentObject(store)
         }
     }
 }
@@ -105,5 +105,40 @@ struct AddCloneCardView: View {
                 NSCursor.pop()
             }
         }
+    }
+}
+
+// MARK: - Max Clones Reached (Hiển thị khi đã đạt giới hạn 4 TK)
+struct MaxClonesReachedView: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.orange)
+            }
+            
+            Text("Đã đạt giới hạn")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.secondary)
+            
+            Text("Tối đa \(CloneStore.maxClones) tài khoản")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 130)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Color.orange.opacity(0.2), lineWidth: 1)
+                )
+        )
     }
 }

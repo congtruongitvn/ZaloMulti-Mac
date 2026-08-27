@@ -12,6 +12,12 @@ struct EditCloneView: View {
     
     let clone: CloneAccount
     
+    private enum Field: Hashable {
+        case name
+        case phone
+    }
+    
+    @FocusState private var focusedField: Field?
     @State private var name: String
     @State private var phoneNumber: String
     
@@ -27,8 +33,12 @@ struct EditCloneView: View {
                 Text("Chỉnh sửa — \(clone.name)")
                     .font(.headline)
                 Spacer()
-                Button("Huỷ") { dismiss() }
-                    .keyboardShortcut(.escape)
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             }
             .padding()
             
@@ -38,10 +48,25 @@ struct EditCloneView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     GroupBox("Thông tin tài khoản") {
                         VStack(alignment: .leading, spacing: 12) {
-                            LabeledField("Tên hiển thị", text: $name,
-                                        placeholder: "VD: Business, Shop Online...")
-                            LabeledField("Số điện thoại", text: $phoneNumber,
-                                        placeholder: "0901234567")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Tên hiển thị")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("VD: Business, Shop Online...", text: $name)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($focusedField, equals: .name)
+                                    .id("edit_clone_name_field")
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Số điện thoại")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("0901234567", text: $phoneNumber)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($focusedField, equals: .phone)
+                                    .id("edit_clone_phone_field")
+                            }
                         }
                         .padding(8)
                     }

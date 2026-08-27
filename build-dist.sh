@@ -4,7 +4,8 @@
 
 set -e
 
-PROJECT_DIR="/Users/nct/ZaloMulti"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
 DIST_DIR="$PROJECT_DIR/dist"
 PROJECT="$PROJECT_DIR/ZaloMulti.xcodeproj"
 SCHEME="ZaloMulti"
@@ -20,7 +21,7 @@ echo ""
 echo "▸ Dọn dẹp..."
 pkill -f ZaloMulti 2>/dev/null || true
 pkill -9 -f xcodebuild 2>/dev/null || true
-sleep 2
+sleep 1
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
@@ -31,25 +32,29 @@ build_arch() {
     
     echo ""
     echo "═══════════════════════════════════════════════════"
-    echo "  Building: $LABEL ($ARCH)"
+    echo "  Building: $LABEL ($ARCH) — Configuration: Release"
     echo "═══════════════════════════════════════════════════"
     
-    # Mỗi arch dùng SYMROOT riêng + OBJROOT riêng → không đụng nhau
+    # Mỗi arch dùng SYMROOT riêng + OBJROOT riêng + derivedDataPath riêng trong workspace
     xcodebuild -project "$PROJECT" -scheme "$SCHEME" \
-        -configuration Debug \
+        -configuration Release \
         ARCHS="$ARCH" \
         ONLY_ACTIVE_ARCH=NO \
         SWIFT_OPTIMIZATION_LEVEL="-O" \
         GCC_OPTIMIZATION_LEVEL=s \
         SYMROOT="$BUILD_DIR" \
         OBJROOT="$BUILD_DIR/obj" \
-        clean build 2>&1 | grep -E "^.*error:" || true
+        -derivedDataPath "$BUILD_DIR/derived" \
+        build 2>&1 | grep -E "^.*(error:|BUILD FAILED|BUILD SUCCEEDED)" || true
     
     # Kiểm tra build result
-    local APP_PATH="$BUILD_DIR/Debug/ZaloMulti.app"
+    local APP_PATH=$(find "$BUILD_DIR" -name "ZaloMulti.app" -type d | grep -v "/derived/" | head -n 1)
+    if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+        APP_PATH=$(find "$BUILD_DIR" -name "ZaloMulti.app" -type d | head -n 1)
+    fi
     
-    if [ ! -f "$APP_PATH/Contents/MacOS/ZaloMulti" ]; then
-        echo "❌ Build failed — no binary for $ARCH"
+    if [ -z "$APP_PATH" ] || [ ! -f "$APP_PATH/Contents/MacOS/ZaloMulti" ]; then
+        echo "❌ Build failed — no binary for $ARCH in $BUILD_DIR"
         return 1
     fi
     
@@ -60,8 +65,9 @@ build_arch() {
     rm -f "$APP_PATH/Contents/MacOS/ZaloMulti.debug.dylib" 2>/dev/null
     rm -f "$APP_PATH/Contents/MacOS/__preview.dylib" 2>/dev/null
     
-    # Ad-hoc sign
-    codesign --force --sign - --deep "$APP_PATH" 2>/dev/null || true
+    # Ad-hoc sign với hardened runtime cho Apple Silicon
+    codesign --force --sign - --deep -o runtime "$APP_PATH" 2>/dev/null || \
+        codesign --force --sign - --deep "$APP_PATH" 2>/dev/null || true
     
     # Copy to dist
     local FINAL_NAME="ZaloMulti-${VERSION:-2.1.0}-$LABEL.app"
@@ -104,7 +110,8 @@ if [ -f "$INTEL_BIN" ] && [ -f "$ARM_BIN" ]; then
     lipo -create "$INTEL_BIN" "$ARM_BIN" -output "$UNIVERSAL_APP/Contents/MacOS/ZaloMulti"
     
     # Re-sign
-    codesign --force --sign - --deep "$UNIVERSAL_APP" 2>/dev/null || true
+    codesign --force --sign - --deep -o runtime "$UNIVERSAL_APP" 2>/dev/null || \
+        codesign --force --sign - --deep "$UNIVERSAL_APP" 2>/dev/null || true
     
     echo "✅ $(file -b "$UNIVERSAL_APP/Contents/MacOS/ZaloMulti")"
     

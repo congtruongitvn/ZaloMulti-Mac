@@ -17,6 +17,8 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
+*.zip
+ZaloMulti_Win/
 
 # Temporary files
 portfolio-temp/
