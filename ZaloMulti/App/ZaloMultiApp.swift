@@ -8,7 +8,7 @@ import SwiftUI
 
 @main
 struct ZaloMultiApp: App {
-    @StateObject private var cloneStore = CloneStore()
+    @StateObject private var cloneStore = CloneStore.shared
     @State private var showUpdateSheet = false
     
     init() {
@@ -23,7 +23,7 @@ struct ZaloMultiApp: App {
     
     var body: some Scene {
         WindowGroup("Zalỏ - macOS") {
-            ContentView()
+            ContentView(cloneStore: cloneStore)
                 .environmentObject(cloneStore)
                 .frame(minWidth: 860, minHeight: 560)
                 .onAppear {

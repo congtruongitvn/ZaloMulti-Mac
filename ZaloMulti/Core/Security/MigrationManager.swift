@@ -188,9 +188,7 @@ final class MigrationManager {
     func cleanupOldVersionData() {
         let fm = FileManager.default
         
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.app"
         let legacyPaths = [
-            "\(NSHomeDirectory())/Library/Preferences/\(bundleID).plist",
             "\(Self.appSupportDir)/donate_status.json",
             "\(Self.appSupportDir)/donate_cache.json",
         ]

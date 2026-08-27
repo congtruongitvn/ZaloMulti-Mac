@@ -26,16 +26,8 @@ enum AntiTamper {
     }
     
     static func denyDebuggerAttach() {
-        #if !DEBUG
-        let ptraceVal: CInt = 31 // PT_DENY_ATTACH
-        typealias PtraceFunc = @convention(c) (CInt, pid_t, CInt, CInt) -> CInt
-        if let handle = dlopen("/usr/lib/libc.dylib", RTLD_NOW),
-           let sym = dlsym(handle, "ptrace") {
-            let ptrace = unsafeBitCast(sym, to: PtraceFunc.self)
-            _ = ptrace(ptraceVal, 0, 0, 0)
-            dlclose(handle)
-        }
-        #endif
+        // PT_DENY_ATTACH gây crash / thoát bất ngờ trên Apple Silicon khi macOS WindowServer
+        // hoặc crash reporter hooks vào process. Giữ hàm an toàn, không gọi ptrace kernel.
     }
     
     // MARK: - Code Integrity

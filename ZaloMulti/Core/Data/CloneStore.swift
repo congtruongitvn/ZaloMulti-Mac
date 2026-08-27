@@ -12,6 +12,9 @@ import SwiftUI
 @MainActor
 final class CloneStore: ObservableObject {
     
+    // MARK: - Singleton
+    static let shared = CloneStore()
+    
     // MARK: - Constants
     static let maxClones = 4
     

@@ -8,7 +8,7 @@ import SwiftUI
 
 struct AddCloneView: View {
     @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var store: CloneStore
+    @ObservedObject var store: CloneStore = CloneStore.shared
     
     private enum Field: Hashable {
         case name
