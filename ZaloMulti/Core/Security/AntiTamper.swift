@@ -108,14 +108,11 @@ enum AntiTamper {
         
         denyDebuggerAttach()
         
-        // Periodic check mỗi 60 giây — CHỈ check injection, KHÔNG terminate ad-hoc
+        // Periodic check mỗi 60 giây — CHỈ ghi log cảnh báo, KHÔNG terminate app
         DispatchQueue.global(qos: .utility).async {
             let timer = Timer(timeInterval: 60, repeats: true) { _ in
                 if isDebuggerAttached || hasInjectedLibraries || hasSuspiciousEnvironment {
-                    DiagnosticLogger.error("SECURITY", "Phát hiện tampering!")
-                    DispatchQueue.main.async {
-                        NSApplication.shared.terminate(nil)
-                    }
+                    DiagnosticLogger.warning("SECURITY", "Phát hiện môi trường thay đổi — tiếp tục chạy an toàn")
                 }
             }
             RunLoop.current.add(timer, forMode: .default)

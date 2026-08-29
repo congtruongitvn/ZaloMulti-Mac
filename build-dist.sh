@@ -65,9 +65,14 @@ build_arch() {
     rm -f "$APP_PATH/Contents/MacOS/ZaloMulti.debug.dylib" 2>/dev/null
     rm -f "$APP_PATH/Contents/MacOS/__preview.dylib" 2>/dev/null
     
-    # Ad-hoc sign với hardened runtime cho Apple Silicon
-    codesign --force --sign - --deep -o runtime "$APP_PATH" 2>/dev/null || \
+    local ENT_PATH="$PROJECT_DIR/ZaloMulti/Resources/ZaloCloneManager.entitlements"
+    
+    # Ad-hoc sign với entitlements cho Apple Silicon & Intel
+    if [ -f "$ENT_PATH" ]; then
+        codesign --force --sign - --entitlements "$ENT_PATH" --deep "$APP_PATH" 2>/dev/null || true
+    else
         codesign --force --sign - --deep "$APP_PATH" 2>/dev/null || true
+    fi
     
     # Copy to dist
     local FINAL_NAME="ZaloMulti-${VERSION:-2.1.0}-$LABEL.app"
@@ -110,8 +115,12 @@ if [ -f "$INTEL_BIN" ] && [ -f "$ARM_BIN" ]; then
     lipo -create "$INTEL_BIN" "$ARM_BIN" -output "$UNIVERSAL_APP/Contents/MacOS/ZaloMulti"
     
     # Re-sign
-    codesign --force --sign - --deep -o runtime "$UNIVERSAL_APP" 2>/dev/null || \
+    ENT_PATH="$PROJECT_DIR/ZaloMulti/Resources/ZaloCloneManager.entitlements"
+    if [ -f "$ENT_PATH" ]; then
+        codesign --force --sign - --entitlements "$ENT_PATH" --deep "$UNIVERSAL_APP" 2>/dev/null || true
+    else
         codesign --force --sign - --deep "$UNIVERSAL_APP" 2>/dev/null || true
+    fi
     
     echo "✅ $(file -b "$UNIVERSAL_APP/Contents/MacOS/ZaloMulti")"
     

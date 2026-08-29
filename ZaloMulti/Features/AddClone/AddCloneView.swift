@@ -51,7 +51,6 @@ struct AddCloneView: View {
                             TextField("VD: Business, Shop Online...", text: $name)
                                 .textFieldStyle(.roundedBorder)
                                 .focused($focusedField, equals: .name)
-                                .id("add_clone_name_field")
                                 .onSubmit { focusedField = .phone }
                         }
                         
@@ -62,9 +61,8 @@ struct AddCloneView: View {
                             TextField("0901234567", text: $phoneNumber)
                                 .textFieldStyle(.roundedBorder)
                                 .focused($focusedField, equals: .phone)
-                                .id("add_clone_phone_field")
                                 .onSubmit {
-                                    if !name.isEmpty && !isCreating && store.canAddMore {
+                                    if !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isCreating && store.canAddMore {
                                         createClone()
                                     }
                                 }

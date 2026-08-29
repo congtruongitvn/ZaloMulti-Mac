@@ -199,5 +199,25 @@ final class MigrationManager {
                 DiagnosticLogger.info("MIGRATE", "Cleaned up legacy: \(URL(fileURLWithPath: path).lastPathComponent)")
             }
         }
+        
+        // Phục hồi ZaloData gốc nếu trước đó bị symlink sang clone/zDeskPro
+        let home = NSHomeDirectory()
+        let defaultZaloData = "\(home)/Library/Application Support/ZaloData"
+        let backupZaloData = "\(home)/Library/Application Support/ZaloData.original"
+        
+        if fm.fileExists(atPath: defaultZaloData) {
+            let attrs = try? fm.attributesOfItem(atPath: defaultZaloData)
+            let isSymlink = attrs?[.type] as? FileAttributeType == .typeSymbolicLink
+            if isSymlink {
+                try? fm.removeItem(atPath: defaultZaloData)
+                if fm.fileExists(atPath: backupZaloData) {
+                    try? fm.moveItem(atPath: backupZaloData, toPath: defaultZaloData)
+                    DiagnosticLogger.info("MIGRATE", "Đã phục hồi ZaloData gốc từ ZaloData.original")
+                }
+            }
+        } else if fm.fileExists(atPath: backupZaloData) {
+            try? fm.moveItem(atPath: backupZaloData, toPath: defaultZaloData)
+            DiagnosticLogger.info("MIGRATE", "Đã phục hồi ZaloData gốc từ ZaloData.original")
+        }
     }
 }

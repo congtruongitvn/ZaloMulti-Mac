@@ -146,14 +146,22 @@ final class ZaloCloneEngine: ObservableObject {
         let fm = FileManager.default
         try fm.createDirectory(atPath: ZaloPaths.cloneAppBase, withIntermediateDirectories: true)
         try fm.createDirectory(atPath: dataPath, withIntermediateDirectories: true)
-        for subdir in ["Library/Application Support", "Library/Caches", "Library/Preferences", "Documents", "tmp"] {
+        let subdirs = [
+            "Library/Application Support/Zalo",
+            "Library/Application Support/ZaloData",
+            "Library/Caches",
+            "Library/Preferences",
+            "Documents",
+            "tmp"
+        ]
+        for subdir in subdirs {
             try fm.createDirectory(atPath: "\(dataPath)/\(subdir)", withIntermediateDirectories: true)
         }
     }
     
     private nonisolated static func copyBundle(from source: String, to destination: String) async throws {
         let fm = FileManager.default
-        if fm.fileExists(atPath: destination) { try fm.removeItem(atPath: destination) }
+        if fm.fileExists(atPath: destination) { try? fm.removeItem(atPath: destination) }
         
         // Chạy cp -c (APFS clone) trên background thread
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -165,6 +173,12 @@ final class ZaloCloneEngine: ObservableObject {
             
             cloneProcess.terminationHandler = { proc in
                 if proc.terminationStatus == 0 {
+                    // Cấp quyền ghi toàn bộ file sau khi clone
+                    let chmodProc = Process()
+                    chmodProc.executableURL = URL(fileURLWithPath: "/bin/chmod")
+                    chmodProc.arguments = ["-R", "u+w", destination]
+                    try? chmodProc.run()
+                    chmodProc.waitUntilExit()
                     continuation.resume()
                 } else {
                     // Fallback: rsync
@@ -176,6 +190,11 @@ final class ZaloCloneEngine: ObservableObject {
                     
                     rsyncProcess.terminationHandler = { rsync in
                         if rsync.terminationStatus == 0 {
+                            let chmodProc = Process()
+                            chmodProc.executableURL = URL(fileURLWithPath: "/bin/chmod")
+                            chmodProc.arguments = ["-R", "u+w", destination]
+                            try? chmodProc.run()
+                            chmodProc.waitUntilExit()
                             continuation.resume()
                         } else {
                             continuation.resume(throwing: CloneError.copyFailed("rsync exit code \(rsync.terminationStatus)"))
@@ -204,13 +223,14 @@ final class ZaloCloneEngine: ObservableObject {
         let script = """
         #!/bin/bash
         export HOME="\(dataPath)"
+        export TMPDIR="\(dataPath)/tmp"
         exec "$(dirname "$0")/Zalo.orig" "$@"
         """
         try script.write(toFile: binaryPath, atomically: true, encoding: .utf8)
         
         let chmodProcess = Process()
         chmodProcess.executableURL = URL(fileURLWithPath: "/bin/chmod")
-        chmodProcess.arguments = ["+x", binaryPath]
+        chmodProcess.arguments = ["+x", binaryPath, origBinaryPath]
         try chmodProcess.run()
         chmodProcess.waitUntilExit()
     }
@@ -220,6 +240,25 @@ final class ZaloCloneEngine: ObservableObject {
         guard FileManager.default.fileExists(atPath: plistPath) else { throw CloneError.plistNotFound }
         try runPlistBuddy(plistPath: plistPath, command: "Set :CFBundleIdentifier \(newBundleID)")
         _ = try? runPlistBuddy(plistPath: plistPath, command: "Delete :ElectronAsarIntegrity")
+        
+        // Đổi Bundle ID cho các Helper apps để đồng bộ
+        let frameworksDir = "\(appPath)/Contents/Frameworks"
+        let fm = FileManager.default
+        if let contents = try? fm.contentsOfDirectory(atPath: frameworksDir) {
+            for item in contents where item.hasSuffix(".app") {
+                let helperPlist = "\(frameworksDir)/\(item)/Contents/Info.plist"
+                if fm.fileExists(atPath: helperPlist) {
+                    let suffix = item.replacingOccurrences(of: "Zalo Helper", with: "")
+                        .replacingOccurrences(of: ".app", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .replacingOccurrences(of: "(", with: "")
+                        .replacingOccurrences(of: ")", with: "")
+                    let helperID = suffix.isEmpty ? "\(newBundleID).helper" : "\(newBundleID).helper.\(suffix)"
+                    _ = try? runPlistBuddy(plistPath: helperPlist, command: "Set :CFBundleIdentifier \(helperID)")
+                    _ = try? runPlistBuddy(plistPath: helperPlist, command: "Delete :ElectronAsarIntegrity")
+                }
+            }
+        }
     }
     
     private nonisolated static func runPlistBuddy(plistPath: String, command: String) throws {
@@ -306,30 +345,90 @@ final class ZaloCloneEngine: ObservableObject {
     private nonisolated static func removeQuarantine(appPath: String) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
-        process.arguments = ["-r", "-d", "com.apple.quarantine", appPath]
+        process.arguments = ["-cr", appPath]
         try process.run()
         process.waitUntilExit()
     }
     
     private nonisolated static func resignApp(appPath: String) async throws {
         let fm = FileManager.default
+        
+        // Tạo file entitlements tạm thời có đầy đủ JIT và Hardened Runtime permissions cho Apple Silicon
+        let entitlementsContent = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>com.apple.security.cs.allow-jit</key>
+            <true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+            <true/>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+            <key>com.apple.security.device.audio-input</key>
+            <true/>
+            <key>com.apple.security.device.camera</key>
+            <true/>
+        </dict>
+        </plist>
+        """
+        
+        let tempEntitlementsPath = "\(NSTemporaryDirectory())zalo_clone_entitlements_\(UUID().uuidString).plist"
+        try entitlementsContent.write(toFile: tempEntitlementsPath, atomically: true, encoding: .utf8)
+        defer {
+            try? fm.removeItem(atPath: tempEntitlementsPath)
+        }
+        
+        // 1. Ký mã Zalo.orig (Mach-O binary thực sự) với entitlements
+        let origBinaryPath = "\(appPath)/Contents/MacOS/Zalo.orig"
+        if fm.fileExists(atPath: origBinaryPath) {
+            try runCodesign(path: origBinaryPath, entitlementsPath: tempEntitlementsPath)
+        }
+        
+        // 2. Ký mã các thư viện dylibs trong Electron Framework
+        let libsDir = "\(appPath)/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries"
+        if let libItems = try? fm.contentsOfDirectory(atPath: libsDir) {
+            for lib in libItems where lib.hasSuffix(".dylib") {
+                try? runCodesign(path: "\(libsDir)/\(lib)")
+            }
+        }
+        
+        // 3. Ký mã crashpad handler
+        let crashpadPath = "\(appPath)/Contents/Frameworks/Electron Framework.framework/Versions/A/Helpers/chrome_crashpad_handler"
+        if fm.fileExists(atPath: crashpadPath) {
+            try? runCodesign(path: crashpadPath)
+        }
+        
+        // 4. Ký mã các helper apps và frameworks con
         let frameworksDir = "\(appPath)/Contents/Frameworks"
         if let contents = try? fm.contentsOfDirectory(atPath: frameworksDir) {
             for item in contents {
                 let itemPath = "\(frameworksDir)/\(item)"
-                if item.hasSuffix(".framework") || item.hasSuffix(".app") {
+                if item.hasSuffix(".app") {
+                    try runCodesign(path: itemPath, deep: true, entitlementsPath: tempEntitlementsPath)
+                } else if item.hasSuffix(".framework") {
                     try runCodesign(path: itemPath, deep: true)
                 }
             }
         }
-        try runCodesign(path: appPath, deep: true, noStrict: true)
+        
+        // 5. Ký mã toàn bộ App bundle chính với entitlements
+        try runCodesign(path: appPath, deep: true, noStrict: true, entitlementsPath: tempEntitlementsPath)
     }
     
-    private nonisolated static func runCodesign(path: String, deep: Bool = false, noStrict: Bool = false) throws {
+    private nonisolated static func runCodesign(
+        path: String,
+        deep: Bool = false,
+        noStrict: Bool = false,
+        entitlementsPath: String? = nil
+    ) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
         var args = ["--force", "--sign", "-"]
-        if deep { args.insert("--deep", at: 1) }
+        if let entPath = entitlementsPath {
+            args.append(contentsOf: ["--entitlements", entPath])
+        }
+        if deep { args.append("--deep") }
         if noStrict { args.append("--no-strict") }
         args.append(path)
         process.arguments = args

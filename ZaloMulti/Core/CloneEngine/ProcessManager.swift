@@ -27,30 +27,26 @@ final class ProcessManager: ObservableObject {
         }
         
         let fm = FileManager.default
-        let realHome = NSHomeDirectory()
         
-        let cloneZaloData = "\(clone.dataPath)/ZaloData"
-        try? fm.createDirectory(atPath: cloneZaloData, withIntermediateDirectories: true)
-        try? fm.createDirectory(atPath: "\(clone.dataPath)/tmp", withIntermediateDirectories: true)
+        // Khởi tạo toàn bộ cấu trúc thư mục cách ly riêng cho clone
+        let cloneAppSupport = "\(clone.dataPath)/Library/Application Support"
+        let cloneZaloDir = "\(cloneAppSupport)/Zalo"
+        let cloneZaloDataDir = "\(cloneAppSupport)/ZaloData"
+        let cloneTmpDir = "\(clone.dataPath)/tmp"
+        let cloneRootZaloData = "\(clone.dataPath)/ZaloData"
         
-        let defaultZaloData = "\(realHome)/Library/Application Support/ZaloData"
-        let backupZaloData = "\(realHome)/Library/Application Support/ZaloData.original"
+        try? fm.createDirectory(atPath: cloneZaloDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: cloneZaloDataDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: cloneTmpDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: cloneRootZaloData, withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: "\(clone.dataPath)/Library/Caches", withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: "\(clone.dataPath)/Library/Preferences", withIntermediateDirectories: true)
+        try? fm.createDirectory(atPath: "\(clone.dataPath)/Documents", withIntermediateDirectories: true)
         
-        if fm.fileExists(atPath: defaultZaloData) {
-            let attrs = try? fm.attributesOfItem(atPath: defaultZaloData)
-            let isSymlink = attrs?[.type] as? FileAttributeType == .typeSymbolicLink
-            
-            if !isSymlink {
-                try? fm.moveItem(atPath: defaultZaloData, toPath: backupZaloData)
-                if (try? fm.contentsOfDirectory(atPath: cloneZaloData))?.isEmpty ?? true {
-                    try? fm.removeItem(atPath: cloneZaloData)
-                    try? fm.copyItem(atPath: backupZaloData, toPath: cloneZaloData)
-                }
-            }
+        // Tạo internal symlink nếu Zalo cần đọc cả 2 path bên trong clone data
+        if !fm.fileExists(atPath: "\(cloneRootZaloData)/Partitions") && fm.fileExists(atPath: "\(cloneZaloDataDir)/Partitions") {
+            try? fm.createSymbolicLink(atPath: "\(cloneRootZaloData)/Partitions", withDestinationPath: "\(cloneZaloDataDir)/Partitions")
         }
-        
-        try? fm.removeItem(atPath: defaultZaloData)
-        try fm.createSymbolicLink(atPath: defaultZaloData, withDestinationPath: cloneZaloData)
         
         let origBinaryPath = "\(clone.appPath)/Contents/MacOS/Zalo.orig"
         let actualBinary = fm.fileExists(atPath: origBinaryPath) ? origBinaryPath : binaryPath
@@ -59,9 +55,13 @@ final class ProcessManager: ObservableObject {
         process.executableURL = URL(fileURLWithPath: actualBinary)
         process.currentDirectoryURL = URL(fileURLWithPath: clone.dataPath)
         
-        // Cấu hình môi trường cách ly cho từng clone (HOME trỏ về clone.dataPath)
+        // Cấu hình môi trường cách ly 100% cho từng clone
         var env = ProcessInfo.processInfo.environment
         env["HOME"] = clone.dataPath
+        env["TMPDIR"] = cloneTmpDir
+        env["XDG_CONFIG_HOME"] = cloneAppSupport
+        env["XDG_DATA_HOME"] = cloneAppSupport
+        env["XDG_CACHE_HOME"] = "\(clone.dataPath)/Library/Caches"
         process.environment = env
         
         process.standardOutput = FileHandle.nullDevice
@@ -80,13 +80,8 @@ final class ProcessManager: ObservableObject {
                 }
             }
             
-            
             return pid
         } catch {
-            try? fm.removeItem(atPath: defaultZaloData)
-            if fm.fileExists(atPath: backupZaloData) {
-                try? fm.createSymbolicLink(atPath: defaultZaloData, withDestinationPath: backupZaloData)
-            }
             throw CloneError.launchFailed(error.localizedDescription)
         }
     }

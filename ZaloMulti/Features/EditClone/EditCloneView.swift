@@ -55,7 +55,6 @@ struct EditCloneView: View {
                                 TextField("VD: Business, Shop Online...", text: $name)
                                     .textFieldStyle(.roundedBorder)
                                     .focused($focusedField, equals: .name)
-                                    .id("edit_clone_name_field")
                             }
                             
                             VStack(alignment: .leading, spacing: 4) {
@@ -65,7 +64,6 @@ struct EditCloneView: View {
                                 TextField("0901234567", text: $phoneNumber)
                                     .textFieldStyle(.roundedBorder)
                                     .focused($focusedField, equals: .phone)
-                                    .id("edit_clone_phone_field")
                             }
                         }
                         .padding(8)
