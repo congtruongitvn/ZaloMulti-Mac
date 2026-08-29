@@ -1,10 +1,10 @@
 {
-    "version": "2.1.3",
-    "build": 7,
+    "version": "2.1.4",
+    "build": 8,
     "release_date": "2026-08-29",
-    "release_notes": "Sửa triệt để lỗi khởi chạy Zalo clone trên các dòng máy chip Apple Silicon (M1/M2/M3/M4): bổ sung JIT entitlements chuẩn macOS, ký mã đa tầng cho file thực thi chính và helper renderer, cách ly hoàn toàn môi trường dữ liệu và nâng cao độ ổn định.",
-    "download_url": "https://github.com/nct88/ZaloMulti-macOS/releases/download/v2.1.3/ZaloMulti-2.1.3-Universal.dmg",
-    "download_size": 1939978,
+    "release_notes": "Khắc phục lỗi không nhập được Tên hiển thị hoặc Số điện thoại khi thêm Clone trên máy Apple Silicon: chuyển form sang modal trong cửa sổ, giữ ổn định focus và dữ liệu nhập. Đồng thời hiển thị lỗi tạo clone trực tiếp trong form.",
+    "download_url": "https://github.com/nct88/ZaloMulti-macOS/releases/download/v2.1.4/ZaloMulti-2.1.4-Universal.dmg",
+    "download_size": 1947787,
     "min_os_version": "14.0",
     "mandatory": true
 }
