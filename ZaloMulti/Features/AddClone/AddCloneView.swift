@@ -21,6 +21,8 @@ struct AddCloneView: View {
     @State private var isCreating = false
     @State private var createComplete = false
     
+    @State private var errorMessage: String?
+    
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -52,6 +54,7 @@ struct AddCloneView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .focused($focusedField, equals: .name)
                                 .onSubmit { focusedField = .phone }
+                                .disabled(isCreating)
                         }
                         
                         VStack(alignment: .leading, spacing: 4) {
@@ -66,6 +69,7 @@ struct AddCloneView: View {
                                         createClone()
                                     }
                                 }
+                                .disabled(isCreating)
                         }
                         
                         // Progress bar
@@ -74,7 +78,7 @@ struct AddCloneView: View {
                                 HStack(spacing: 8) {
                                     ProgressView()
                                         .controlSize(.small)
-                                    Text(store.engine.progressMessage)
+                                    Text(store.engine.progressMessage.isEmpty ? "Đang khởi tạo..." : store.engine.progressMessage)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
@@ -90,6 +94,18 @@ struct AddCloneView: View {
                             }
                             .padding(.top, 4)
                             .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                        
+                        if let error = errorMessage {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .lineLimit(2)
+                            }
+                            .padding(.top, 4)
                         }
                         
                         if createComplete {
@@ -187,15 +203,15 @@ struct AddCloneView: View {
     
     private func createClone() {
         guard store.canAddMore else {
-            store.errorMessage = "Đã đạt giới hạn tối đa \(CloneStore.maxClones) tài khoản."
-            store.showError = true
+            errorMessage = "Đã đạt giới hạn tối đa \(CloneStore.maxClones) tài khoản."
             return
         }
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanName.isEmpty else { return }
         
+        errorMessage = nil
+        isCreating = true
         store.engine.progressMessage = "Đang chuẩn bị..."
-        withAnimation { isCreating = true }
         
         Task {
             do {
@@ -205,18 +221,26 @@ struct AddCloneView: View {
                     name: cleanName,
                     phone: phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
-                store.clones.append(clone)
-                store.saveClones()
-                withAnimation {
-                    isCreating = false
-                    createComplete = true
+                await MainActor.run {
+                    store.clones.append(clone)
+                    store.saveClones()
+                    withAnimation {
+                        isCreating = false
+                        createComplete = true
+                    }
                 }
                 try? await Task.sleep(for: .seconds(1.0))
-                closeForm()
+                await MainActor.run {
+                    closeForm()
+                }
             } catch {
-                withAnimation { isCreating = false }
-                store.errorMessage = error.localizedDescription
-                store.showError = true
+                await MainActor.run {
+                    withAnimation {
+                        isCreating = false
+                        errorMessage = error.localizedDescription
+                    }
+                }
+                DiagnosticLogger.error("CREATE", "Lỗi tạo clone: \(error.localizedDescription)")
             }
         }
     }

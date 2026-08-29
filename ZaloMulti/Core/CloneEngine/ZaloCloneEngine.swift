@@ -161,54 +161,41 @@ final class ZaloCloneEngine: ObservableObject {
     
     private nonisolated static func copyBundle(from source: String, to destination: String) async throws {
         let fm = FileManager.default
-        if fm.fileExists(atPath: destination) { try? fm.removeItem(atPath: destination) }
+        if fm.fileExists(atPath: destination) {
+            let chmodClean = Process()
+            chmodClean.executableURL = URL(fileURLWithPath: "/bin/chmod")
+            chmodClean.arguments = ["-R", "u+w", destination]
+            try? chmodClean.run()
+            chmodClean.waitUntilExit()
+            try? fm.removeItem(atPath: destination)
+        }
         
-        // Chạy cp -c (APFS clone) trên background thread
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let cloneProcess = Process()
-            cloneProcess.executableURL = URL(fileURLWithPath: "/bin/cp")
-            cloneProcess.arguments = ["-c", "-R", source, destination]
-            cloneProcess.standardOutput = FileHandle.nullDevice
-            cloneProcess.standardError = FileHandle.nullDevice
-            
-            cloneProcess.terminationHandler = { proc in
-                if proc.terminationStatus == 0 {
-                    // Cấp quyền ghi toàn bộ file sau khi clone
-                    let chmodProc = Process()
-                    chmodProc.executableURL = URL(fileURLWithPath: "/bin/chmod")
-                    chmodProc.arguments = ["-R", "u+w", destination]
-                    try? chmodProc.run()
-                    chmodProc.waitUntilExit()
-                    continuation.resume()
-                } else {
-                    // Fallback: rsync
-                    let rsyncProcess = Process()
-                    rsyncProcess.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
-                    rsyncProcess.arguments = ["-a", "--quiet", source + "/", destination + "/"]
-                    rsyncProcess.standardOutput = FileHandle.nullDevice
-                    rsyncProcess.standardError = FileHandle.nullDevice
-                    
-                    rsyncProcess.terminationHandler = { rsync in
-                        if rsync.terminationStatus == 0 {
-                            let chmodProc = Process()
-                            chmodProc.executableURL = URL(fileURLWithPath: "/bin/chmod")
-                            chmodProc.arguments = ["-R", "u+w", destination]
-                            try? chmodProc.run()
-                            chmodProc.waitUntilExit()
-                            continuation.resume()
-                        } else {
-                            continuation.resume(throwing: CloneError.copyFailed("rsync exit code \(rsync.terminationStatus)"))
-                        }
-                    }
-                    do { try rsyncProcess.run() } catch {
-                        continuation.resume(throwing: CloneError.copyFailed(error.localizedDescription))
-                    }
-                }
-            }
-            do { try cloneProcess.run() } catch {
-                continuation.resume(throwing: error)
+        // 1. Thử copy APFS clone siêu tốc (cp -c -R)
+        let cpProcess = Process()
+        cpProcess.executableURL = URL(fileURLWithPath: "/bin/cp")
+        cpProcess.arguments = ["-c", "-R", source, destination]
+        try? cpProcess.run()
+        cpProcess.waitUntilExit()
+        
+        // 2. Nếu cp -c thất bại thì fallback sang rsync
+        if cpProcess.terminationStatus != 0 {
+            if fm.fileExists(atPath: destination) { try? fm.removeItem(atPath: destination) }
+            let rsyncProcess = Process()
+            rsyncProcess.executableURL = URL(fileURLWithPath: "/usr/bin/rsync")
+            rsyncProcess.arguments = ["-a", source + "/", destination + "/"]
+            try rsyncProcess.run()
+            rsyncProcess.waitUntilExit()
+            guard rsyncProcess.terminationStatus == 0 else {
+                throw CloneError.copyFailed("rsync exit code \(rsyncProcess.terminationStatus)")
             }
         }
+        
+        // 3. Cấp quyền ghi toàn bộ file
+        let chmodProc = Process()
+        chmodProc.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        chmodProc.arguments = ["-R", "u+w", destination]
+        try? chmodProc.run()
+        chmodProc.waitUntilExit()
     }
     
     private nonisolated static func createWrapperScript(appPath: String, dataPath: String) throws {
@@ -420,7 +407,8 @@ final class ZaloCloneEngine: ObservableObject {
         path: String,
         deep: Bool = false,
         noStrict: Bool = false,
-        entitlementsPath: String? = nil
+        entitlementsPath: String? = nil,
+        throwOnError: Bool = true
     ) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
@@ -435,12 +423,26 @@ final class ZaloCloneEngine: ObservableObject {
         let pipe = Pipe()
         process.standardError = pipe
         try process.run()
-        // ⚡ Read pipe BEFORE waitUntilExit to prevent deadlock
         let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            throw CloneError.codesignFailed(errorMessage)
+        
+        if process.terminationStatus != 0 {
+            let fallback = Process()
+            fallback.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            var fbArgs = ["--force", "--sign", "-"]
+            if let entPath = entitlementsPath {
+                fbArgs.append(contentsOf: ["--entitlements", entPath])
+            }
+            if deep { fbArgs.append("--deep") }
+            fbArgs.append(path)
+            fallback.arguments = fbArgs
+            try? fallback.run()
+            fallback.waitUntilExit()
+            
+            if fallback.terminationStatus != 0 && throwOnError {
+                let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+                throw CloneError.codesignFailed(errorMessage)
+            }
         }
     }
 }
