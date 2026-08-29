@@ -1,13 +1,13 @@
 // AddCloneView.swift
 // ZaloMulti
 //
-// Sheet thêm tài khoản clone mới — với progress bar inline.
-// Rebuild v2.1 — @Environment(\.dismiss) + @EnvironmentObject.
+// Modal thêm tài khoản clone mới — với progress bar inline.
+// Rebuild v2.1 — Custom In-Window Modal chống mất dữ liệu khi re-render trên macOS.
 
 import SwiftUI
 
 struct AddCloneView: View {
-    @Environment(\.dismiss) var dismiss
+    @Binding var isPresented: Bool
     @ObservedObject var store: CloneStore = CloneStore.shared
     
     private enum Field: Hashable {
@@ -40,7 +40,7 @@ struct AddCloneView: View {
             
             Divider()
             
-            // Content Form (Không dùng ScrollView để tránh lỗi auto-scroll mất focus/viewport trên macOS)
+            // Content Form
             VStack(alignment: .leading, spacing: 16) {
                 GroupBox("Thông tin tài khoản") {
                     VStack(alignment: .leading, spacing: 14) {
@@ -134,16 +134,27 @@ struct AddCloneView: View {
             .padding()
         }
         .frame(width: 460, height: 350)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 focusedField = .name
             }
         }
     }
     
     private func closeForm() {
-        store.showAddCloneSheet = false
-        dismiss()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isPresented = false
+            store.showAddCloneSheet = false
+        }
     }
     
     private var progressStep: String {
@@ -200,7 +211,7 @@ struct AddCloneView: View {
                     isCreating = false
                     createComplete = true
                 }
-                try? await Task.sleep(for: .seconds(1.2))
+                try? await Task.sleep(for: .seconds(1.0))
                 closeForm()
             } catch {
                 withAnimation { isCreating = false }
